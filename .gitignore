@@ -2,3 +2,4 @@ data/*.json
 data/*.tmp
 .DS_Store
 node_modules/
+.claude/

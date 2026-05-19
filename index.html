@@ -599,6 +599,8 @@
       max-width: 800px;
       text-align: center;
       padding: 40px;
+      user-select: none;
+      -webkit-user-select: none;
     }
 
     .overlay-award-info {
@@ -659,7 +661,13 @@
       border: none;
       border-radius: 999px;
       cursor: pointer;
-      transition: all 0.2s ease;
+      user-select: none;
+      -webkit-user-select: none;
+      touch-action: manipulation;
+      -webkit-tap-highlight-color: transparent;
+      position: relative;
+      z-index: 100;
+      will-change: transform;
     }
 
     .overlay-stop-button:hover {
@@ -669,6 +677,7 @@
 
     .overlay-stop-button:active {
       transform: scale(0.98);
+      background: var(--teal);
     }
 
     [hidden] {
@@ -920,6 +929,11 @@
         });
 
         document.getElementById("overlayStopButton").addEventListener("click", stopDrawEarly);
+        document.getElementById("overlayStopButton").addEventListener("touchend", (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          stopDrawEarly();
+        }, { passive: false });
         document.getElementById("copyLinkButton").addEventListener("click", copyJoinLink);
         updateJoinLink("");
         renderQr();
@@ -1256,8 +1270,10 @@
 
       function stopDrawEarly() {
         if (!state.drawing || !state.currentAward) return;
+        const drawAward = state.currentAward;
         window.cancelAnimationFrame(state.drawFrame);
-        finishDrawFromOverlay();
+        state.drawing = false;
+        finishDrawFromOverlay(drawAward);
       }
 
       async function finishDraw(award) {
