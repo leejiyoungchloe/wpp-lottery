@@ -1,0 +1,10 @@
+{
+  "name": "wpp-media-delivery-lottery",
+  "version": "1.0.0",
+  "private": true,
+  "description": "WPP Media Delivery 618 Kick Off lottery page",
+  "scripts": {
+    "start": "node server.js",
+    "start:tunnel": "node start-tunnel.js"
+  }
+}

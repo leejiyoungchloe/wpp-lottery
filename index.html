@@ -1,0 +1,1696 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MEDIA DELIVERY TEAM 抽奖</title>
+  <link rel="icon" href="data:,">
+  <script src="https://unpkg.com/peerjs@1.5.5/dist/peerjs.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/qrious@4.0.2/dist/qrious.min.js"></script>
+  <style>
+    :root {
+      color-scheme: light;
+      --navy: #001b62;
+      --navy-soft: rgba(0, 27, 98, 0.76);
+      --lime: #a4fb56;
+      --green: #00ed9e;
+      --teal: #00d1d5;
+      --cyan: #08c9dc;
+      --white: #ffffff;
+      --surface: rgba(255, 255, 255, 0.72);
+      --surface-strong: rgba(255, 255, 255, 0.88);
+      --line: rgba(0, 27, 98, 0.18);
+      --shadow: 0 26px 70px rgba(0, 42, 83, 0.16);
+      --radius: 8px;
+      font-family: Inter, "PingFang SC", "Microsoft YaHei", Arial, sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      min-height: 100%;
+      margin: 0;
+    }
+
+    body {
+      color: var(--navy);
+      overflow-x: hidden;
+      background:
+        linear-gradient(132deg, #a4fb56 0%, #70ef77 22%, #00eba1 54%, #00d0d6 100%);
+    }
+
+    button,
+    input,
+    textarea {
+      font: inherit;
+    }
+
+    button {
+      border: 0;
+      cursor: pointer;
+    }
+
+    button:disabled {
+      cursor: not-allowed;
+      opacity: 0.46;
+    }
+
+    .app-shell,
+    .join-shell {
+      min-height: 100vh;
+      position: relative;
+      isolation: isolate;
+      overflow: hidden;
+    }
+
+    .app-shell {
+      padding: 32px;
+    }
+
+    .app-shell::before,
+    .join-shell::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      z-index: -2;
+      background:
+        linear-gradient(136deg, rgba(255, 255, 255, 0.28) 0 18%, transparent 18.2% 100%),
+        linear-gradient(136deg, transparent 0 42%, rgba(255, 255, 255, 0.08) 42.3% 43.6%, transparent 43.9% 100%),
+        linear-gradient(132deg, #a4fb56 0%, #78ef76 25%, #00eca2 57%, #00d0d6 100%);
+    }
+
+    .app-shell::after,
+    .join-shell::after {
+      content: "WPP Media";
+      position: fixed;
+      right: 30px;
+      bottom: 24px;
+      z-index: -1;
+      color: var(--navy);
+      font-size: clamp(1.2rem, 2.4vw, 2rem);
+      font-weight: 950;
+      letter-spacing: 0;
+    }
+
+    .host-header {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 24px;
+      align-items: end;
+      margin-bottom: 24px;
+    }
+
+    .theme-kicker {
+      margin: 0 0 10px;
+      color: var(--navy-soft);
+      font-size: 1rem;
+      font-weight: 900;
+      letter-spacing: 0;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      margin: 0;
+      color: var(--navy);
+      font-size: clamp(3rem, 6.4vw, 6.9rem);
+      line-height: 0.92;
+      letter-spacing: 0;
+      text-transform: uppercase;
+      text-wrap: balance;
+    }
+
+    .logo-lockup {
+      justify-self: end;
+      color: var(--navy);
+      font-size: 1.7rem;
+      font-weight: 950;
+      line-height: 1;
+      white-space: nowrap;
+    }
+
+    .main-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.62fr) minmax(330px, 0.78fr);
+      gap: 22px;
+      align-items: stretch;
+    }
+
+    .stage,
+    .side-panel,
+    .results-panel,
+    .roster-panel,
+    .join-card {
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--surface);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(18px);
+    }
+
+    .stage {
+      min-height: 540px;
+      padding: 28px;
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .stage::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background:
+        linear-gradient(120deg, rgba(255, 255, 255, 0.48), transparent 40%),
+        linear-gradient(132deg, rgba(164, 251, 86, 0.28), rgba(0, 209, 213, 0.22));
+      pointer-events: none;
+    }
+
+    .stage > * {
+      position: relative;
+      z-index: 1;
+    }
+
+    .stage-top {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .pill {
+      min-height: 34px;
+      display: inline-flex;
+      align-items: center;
+      padding: 7px 13px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.56);
+      color: var(--navy);
+      font-weight: 900;
+      white-space: nowrap;
+    }
+
+    .draw-display {
+      min-height: 312px;
+      display: grid;
+      place-items: center;
+      padding: 22px 0;
+    }
+
+    .rolling-name {
+      width: 100%;
+      padding: 22px;
+      color: var(--navy);
+      font-size: clamp(3rem, 7.4vw, 7.6rem);
+      font-weight: 950;
+      line-height: 1.02;
+      text-align: center;
+      text-shadow: 0 16px 40px rgba(255, 255, 255, 0.44);
+      overflow-wrap: anywhere;
+    }
+
+    .draw-toolbar {
+      display: grid;
+      gap: 16px;
+    }
+
+    .progress-wrap {
+      height: 14px;
+      overflow: hidden;
+      border: 1px solid rgba(0, 27, 98, 0.16);
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.46);
+    }
+
+    .progress-bar {
+      width: 100%;
+      height: 100%;
+      transform: scaleX(0);
+      transform-origin: left center;
+      background: linear-gradient(90deg, var(--navy), var(--teal));
+      transition: transform 120ms linear;
+    }
+
+    .draw-actions {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr)) auto;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .award-button,
+    .secondary-button,
+    .danger-button,
+    .small-button {
+      min-height: 46px;
+      padding: 0 16px;
+      border-radius: var(--radius);
+      font-weight: 950;
+      white-space: nowrap;
+    }
+
+    .award-button {
+      border: 1px solid rgba(0, 27, 98, 0.22);
+      background: rgba(255, 255, 255, 0.68);
+      color: var(--navy);
+    }
+
+    .award-button.active,
+    .primary-button {
+      background: var(--navy);
+      color: #fff;
+      box-shadow: 0 14px 34px rgba(0, 27, 98, 0.24);
+    }
+
+    .secondary-button,
+    .small-button {
+      border: 1px solid rgba(0, 27, 98, 0.2);
+      background: rgba(255, 255, 255, 0.62);
+      color: var(--navy);
+    }
+
+    .danger-button {
+      border: 1px solid rgba(0, 27, 98, 0.24);
+      background: rgba(0, 27, 98, 0.08);
+      color: var(--navy);
+    }
+
+    .timer-text {
+      min-width: 72px;
+      color: var(--navy);
+      font-size: 1.25rem;
+      font-weight: 950;
+      text-align: right;
+    }
+
+    .side-panel {
+      padding: 22px;
+      display: grid;
+      gap: 18px;
+      align-content: start;
+      background: rgba(255, 255, 255, 0.78);
+    }
+
+    .panel-title {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: center;
+      margin: 0;
+      color: var(--navy);
+      font-size: 1.14rem;
+      font-weight: 950;
+    }
+
+    .count-block {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 12px;
+      align-items: center;
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: rgba(255, 255, 255, 0.62);
+    }
+
+    .count-number {
+      color: var(--navy);
+      font-size: 3.2rem;
+      font-weight: 950;
+      line-height: 0.9;
+    }
+
+    .count-label {
+      color: var(--navy-soft);
+      font-weight: 900;
+    }
+
+    .status-dot {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--navy-soft);
+      font-size: 0.82rem;
+      font-weight: 900;
+      white-space: nowrap;
+    }
+
+    .status-dot::before {
+      content: "";
+      width: 9px;
+      height: 9px;
+      border-radius: 999px;
+      background: var(--navy);
+      box-shadow: 0 0 0 5px rgba(0, 27, 98, 0.1);
+    }
+
+    .status-dot.error::before {
+      background: #e9365a;
+      box-shadow: 0 0 0 5px rgba(233, 54, 90, 0.13);
+    }
+
+    .qr-frame {
+      width: 100%;
+      max-width: 250px;
+      aspect-ratio: 1 / 1;
+      display: grid;
+      place-items: center;
+      justify-self: center;
+      padding: 14px;
+      border: 1px solid rgba(0, 27, 98, 0.2);
+      border-radius: var(--radius);
+      background: #fff;
+    }
+
+    #qrCanvas {
+      width: 100%;
+      height: auto;
+      image-rendering: crisp-edges;
+    }
+
+    .field-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 8px;
+    }
+
+    .field-stack {
+      display: grid;
+      gap: 8px;
+    }
+
+    label {
+      color: var(--navy-soft);
+      font-size: 0.82rem;
+      font-weight: 950;
+    }
+
+    input,
+    textarea {
+      width: 100%;
+      border: 1px solid rgba(0, 27, 98, 0.18);
+      border-radius: var(--radius);
+      background: rgba(255, 255, 255, 0.7);
+      color: var(--navy);
+      outline: 0;
+    }
+
+    input {
+      height: 44px;
+      padding: 0 12px;
+    }
+
+    textarea {
+      min-height: 92px;
+      padding: 12px;
+      resize: vertical;
+      line-height: 1.45;
+    }
+
+    input:focus,
+    textarea:focus {
+      border-color: var(--navy);
+      box-shadow: 0 0 0 3px rgba(0, 27, 98, 0.12);
+    }
+
+    .lower-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.15fr) minmax(330px, 0.85fr);
+      gap: 22px;
+      margin-top: 22px;
+      padding-bottom: 74px;
+    }
+
+    .results-panel,
+    .roster-panel {
+      padding: 22px;
+      background: rgba(255, 255, 255, 0.72);
+    }
+
+    .results-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 14px;
+    }
+
+    .award-card {
+      min-height: 174px;
+      padding: 17px;
+      border: 1px solid rgba(0, 27, 98, 0.18);
+      border-radius: var(--radius);
+      background: rgba(255, 255, 255, 0.56);
+    }
+
+    .award-card h3 {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      align-items: baseline;
+      margin: 0 0 14px;
+      font-size: 1.13rem;
+      color: var(--navy);
+    }
+
+    .award-card h3 span {
+      color: var(--navy-soft);
+      font-size: 0.82rem;
+      font-weight: 900;
+    }
+
+    .winner-list {
+      list-style: none;
+      display: grid;
+      gap: 10px;
+      padding: 0;
+      margin: 0;
+    }
+
+    .winner-list li {
+      min-height: 38px;
+      display: flex;
+      align-items: center;
+      padding: 8px 10px;
+      border-radius: var(--radius);
+      background: rgba(0, 27, 98, 0.08);
+      color: var(--navy);
+      font-weight: 950;
+      overflow-wrap: anywhere;
+    }
+
+    .empty-winner {
+      color: rgba(0, 27, 98, 0.46);
+    }
+
+    .roster-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 14px;
+    }
+
+    .participant-list {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      align-content: start;
+      max-height: 190px;
+      overflow: auto;
+      margin-top: 14px;
+      padding-right: 4px;
+    }
+
+    .name-chip {
+      max-width: 100%;
+      padding: 7px 10px;
+      border-radius: 999px;
+      background: rgba(0, 27, 98, 0.08);
+      color: var(--navy);
+      font-size: 0.92rem;
+      font-weight: 900;
+      overflow-wrap: anywhere;
+    }
+
+    .join-shell {
+      display: grid;
+      place-items: center;
+      padding: 24px;
+    }
+
+    .join-card {
+      width: min(100%, 440px);
+      padding: 26px;
+      background: rgba(255, 255, 255, 0.8);
+    }
+
+    .join-card h1 {
+      font-size: clamp(2.2rem, 11vw, 3.6rem);
+      line-height: 0.96;
+      margin-bottom: 8px;
+    }
+
+    .join-form {
+      display: grid;
+      gap: 12px;
+      margin-top: 22px;
+    }
+
+    .primary-button {
+      min-height: 48px;
+      border-radius: var(--radius);
+      font-weight: 950;
+    }
+
+    .join-status {
+      min-height: 28px;
+      color: var(--navy-soft);
+      font-weight: 950;
+    }
+
+    .toast {
+      position: fixed;
+      left: 50%;
+      bottom: 28px;
+      z-index: 20;
+      max-width: min(520px, calc(100vw - 32px));
+      min-width: 220px;
+      transform: translate(-50%, 16px);
+      padding: 13px 16px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: rgba(255, 255, 255, 0.92);
+      color: var(--navy);
+      box-shadow: var(--shadow);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 180ms ease, transform 180ms ease;
+      text-align: center;
+      font-weight: 950;
+    }
+
+    .toast.show {
+      opacity: 1;
+      transform: translate(-50%, 0);
+    }
+
+    .draw-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 50;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(0, 27, 98, 0.95);
+      opacity: 0;
+      transition: opacity 0.3s ease;
+    }
+
+    .draw-overlay:not([hidden]) {
+      opacity: 1;
+    }
+
+    .overlay-content {
+      width: 90%;
+      max-width: 800px;
+      text-align: center;
+      padding: 40px;
+    }
+
+    .overlay-award-info {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      margin-bottom: 30px;
+      color: #fff;
+      font-size: 2.5rem;
+      font-weight: 950;
+    }
+
+    .overlay-display {
+      margin: 40px 0;
+    }
+
+    .overlay-rolling-name {
+      color: var(--lime);
+      font-size: clamp(4rem, 10vw, 10rem);
+      font-weight: 950;
+      line-height: 1.02;
+      text-shadow: 0 16px 40px rgba(164, 251, 86, 0.44);
+      overflow-wrap: anywhere;
+    }
+
+    .overlay-progress-wrap {
+      width: 100%;
+      height: 8px;
+      margin: 30px 0 20px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.2);
+      overflow: hidden;
+    }
+
+    .overlay-progress-bar {
+      width: 100%;
+      height: 100%;
+      background: var(--lime);
+      transform-origin: left;
+      transform: scaleX(0);
+      transition: none;
+    }
+
+    .overlay-timer {
+      color: rgba(255, 255, 255, 0.7);
+      font-size: 2.5rem;
+      font-weight: 950;
+      margin-bottom: 40px;
+    }
+
+    .overlay-stop-button {
+      padding: 24px 80px;
+      font-size: 2rem;
+      font-weight: 950;
+      color: var(--navy);
+      background: var(--lime);
+      border: none;
+      border-radius: 999px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .overlay-stop-button:hover {
+      background: var(--green);
+      transform: scale(1.05);
+    }
+
+    .overlay-stop-button:active {
+      transform: scale(0.98);
+    }
+
+    [hidden] {
+      display: none !important;
+    }
+
+    @media (max-width: 1020px) {
+      .host-header,
+      .main-grid,
+      .lower-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .logo-lockup {
+        justify-self: start;
+      }
+
+      .draw-actions,
+      .results-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .timer-text {
+        text-align: left;
+      }
+    }
+
+    @media (max-width: 560px) {
+      .app-shell {
+        padding: 16px;
+      }
+
+      .stage,
+      .side-panel,
+      .results-panel,
+      .roster-panel {
+        padding: 18px;
+      }
+
+      .field-row {
+        grid-template-columns: 1fr;
+      }
+
+      .award-button,
+      .secondary-button,
+      .danger-button,
+      .small-button {
+        width: 100%;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="hostApp" class="app-shell">
+    <header class="host-header">
+      <div>
+        <p class="theme-kicker">WPP Media Delivery 618 Kick Off</p>
+        <h1>MEDIA DELIVERY TEAM 抽奖</h1>
+      </div>
+      <div class="logo-lockup">WPP Media</div>
+    </header>
+
+    <main class="main-grid">
+      <section class="stage" aria-label="抽奖舞台">
+        <div class="stage-top">
+          <span id="stageLabel" class="pill">READY</span>
+          <span id="awardLabel" class="pill">选择奖项开始</span>
+        </div>
+
+        <div class="draw-display">
+          <div id="rollingName" class="rolling-name">等待名单</div>
+        </div>
+
+        <div class="draw-toolbar">
+          <div class="progress-wrap" aria-hidden="true">
+            <div id="progressBar" class="progress-bar"></div>
+          </div>
+          <div class="draw-actions">
+            <button class="award-button" type="button" data-award-key="first">抽一等奖 1名</button>
+            <button class="award-button" type="button" data-award-key="second">抽二等奖 2名</button>
+            <button class="award-button" type="button" data-award-key="third">抽三等奖 3名</button>
+            <div id="timerText" class="timer-text">20s</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 抽奖浮层 -->
+      <div id="drawOverlay" class="draw-overlay" hidden>
+        <div class="overlay-content">
+          <div class="overlay-award-info">
+            <span id="overlayAwardLabel">一等奖</span>
+            <span id="overlayAwardCount">1名</span>
+          </div>
+          <div class="overlay-display">
+            <div id="overlayRollingName" class="overlay-rolling-name">准备开始</div>
+          </div>
+          <div class="overlay-progress-wrap">
+            <div id="overlayProgressBar" class="overlay-progress-bar"></div>
+          </div>
+          <div class="overlay-timer" id="overlayTimerText">20s</div>
+          <button id="overlayStopButton" class="overlay-stop-button">停止</button>
+        </div>
+      </div>
+
+      <aside class="side-panel" aria-label="登记与控制">
+        <h2 class="panel-title">
+          <span>手机登记</span>
+          <span id="serverStatus" class="status-dot">连接中</span>
+        </h2>
+
+        <div class="count-block" aria-live="polite">
+          <span id="participantCount" class="count-number">0</span>
+          <span class="count-label">参与人员总数</span>
+        </div>
+
+        <div class="qr-frame">
+          <canvas id="qrCanvas" width="240" height="240" aria-label="登记二维码"></canvas>
+        </div>
+
+        <div class="field-stack">
+          <label for="joinLink">登记链接</label>
+          <div class="field-row">
+            <input id="joinLink" type="text" readonly value="">
+            <button id="copyLinkButton" class="small-button" type="button">复制</button>
+          </div>
+        </div>
+
+        <form id="manualForm" class="field-stack">
+          <label for="manualName">现场添加</label>
+          <div class="field-row">
+            <input id="manualName" type="text" autocomplete="off" placeholder="姓名">
+            <button class="small-button" type="submit">添加</button>
+          </div>
+        </form>
+
+        <div class="field-stack">
+          <label for="bulkNames">批量导入</label>
+          <textarea id="bulkNames" placeholder="每行一个姓名，或用逗号分隔"></textarea>
+          <button id="importNamesButton" class="small-button" type="button">导入名单</button>
+        </div>
+      </aside>
+    </main>
+
+    <section class="lower-grid">
+      <div class="results-panel" aria-label="中奖名单">
+        <h2 class="panel-title">
+          <span>中奖名单</span>
+          <button id="resetResultsButton" class="secondary-button" type="button">重置中奖结果</button>
+        </h2>
+        <div class="results-grid">
+          <article class="award-card">
+            <h3>一等奖 <span>1名</span></h3>
+            <ul id="firstWinners" class="winner-list"></ul>
+          </article>
+          <article class="award-card">
+            <h3>二等奖 <span>2名</span></h3>
+            <ul id="secondWinners" class="winner-list"></ul>
+          </article>
+          <article class="award-card">
+            <h3>三等奖 <span>3名</span></h3>
+            <ul id="thirdWinners" class="winner-list"></ul>
+          </article>
+        </div>
+      </div>
+
+      <div class="roster-panel" aria-label="参与名单">
+        <h2 class="panel-title">参与名单</h2>
+        <div class="roster-actions">
+          <button id="exportButton" class="small-button" type="button">导出 CSV</button>
+          <button id="clearNamesButton" class="danger-button" type="button">清空名单</button>
+        </div>
+        <div id="participantList" class="participant-list"></div>
+      </div>
+    </section>
+  </div>
+
+  <div id="joinApp" class="join-shell" hidden>
+    <section class="join-card">
+      <p class="theme-kicker">WPP Media Delivery 618 Kick Off</p>
+      <h1>MEDIA DELIVERY TEAM 抽奖</h1>
+      <div id="joinStatus" class="join-status">连接中</div>
+      <form id="joinForm" class="join-form">
+        <label for="joinName">姓名</label>
+        <input id="joinName" type="text" autocomplete="name" maxlength="40" placeholder="请输入姓名" required>
+        <button id="joinSubmitButton" class="primary-button" type="submit">提交姓名</button>
+      </form>
+    </section>
+  </div>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <script>
+    (() => {
+      const DRAW_DURATION_MS = 20000;
+      const POLL_INTERVAL_MS = 1500;
+      const LOCAL_STATE_KEY = "wpp-media-delivery-618-static-state";
+      const AWARDS = [
+        { key: "first", label: "一等奖", count: 1, listId: "firstWinners" },
+        { key: "second", label: "二等奖", count: 2, listId: "secondWinners" },
+        { key: "third", label: "三等奖", count: 3, listId: "thirdWinners" }
+      ];
+
+      const params = new URLSearchParams(window.location.search);
+      const isJoinMode = params.get("join") === "1";
+      const state = {
+        mode: "detecting",
+        participants: [],
+        winners: createEmptyWinners(),
+        drawing: false,
+        drawFrame: 0,
+        pollTimer: 0,
+        toastTimer: 0,
+        hostPeer: null,
+        hostConnections: new Map(),
+        joinConnection: null,
+        roomId: "",
+        drawStartTime: null,
+        currentAward: null,
+        eligibleParticipants: []
+      };
+
+      const hostApp = document.getElementById("hostApp");
+      const joinApp = document.getElementById("joinApp");
+
+      if (isJoinMode) {
+        hostApp.hidden = true;
+        joinApp.hidden = false;
+        initJoinMode();
+      } else {
+        initHostMode();
+      }
+
+      async function initHostMode() {
+        document.getElementById("manualForm").addEventListener("submit", async (event) => {
+          event.preventDefault();
+          const input = document.getElementById("manualName");
+          const name = input.value;
+          input.value = "";
+          await submitParticipant(name, "manual");
+        });
+
+        document.getElementById("importNamesButton").addEventListener("click", importNames);
+        document.getElementById("clearNamesButton").addEventListener("click", clearParticipants);
+        document.getElementById("resetResultsButton").addEventListener("click", resetWinners);
+        document.getElementById("exportButton").addEventListener("click", exportParticipants);
+
+        document.querySelectorAll("[data-award-key]").forEach((button) => {
+          button.addEventListener("click", () => startDraw(button.dataset.awardKey));
+        });
+
+        document.getElementById("overlayStopButton").addEventListener("click", stopDrawEarly);
+        document.getElementById("copyLinkButton").addEventListener("click", copyJoinLink);
+        updateJoinLink("");
+        renderQr();
+
+        if (await checkServer()) {
+          state.mode = "backend";
+          setServerStatus("后端已连接", false);
+          await configureBackendJoinLink();
+          await refreshState();
+          state.pollTimer = window.setInterval(() => {
+            if (!state.drawing) refreshState();
+          }, POLL_INTERVAL_MS);
+          return;
+        }
+
+        state.mode = "static";
+        applyState(readLocalState());
+        setServerStatus("静态扫码中", false);
+        await bootHostPeer();
+      }
+
+      async function initJoinMode() {
+        const form = document.getElementById("joinForm");
+        const submitButton = document.getElementById("joinSubmitButton");
+        const status = document.getElementById("joinStatus");
+        const input = document.getElementById("joinName");
+        input.value = normalizeName(params.get("name") || params.get("nickname") || "");
+        submitButton.disabled = true;
+
+        if (await checkServer()) {
+          state.mode = "backend";
+          status.textContent = "请输入姓名";
+          submitButton.disabled = false;
+        } else if (params.get("room")) {
+          state.mode = "static";
+          status.textContent = "连接大屏中";
+          await bootJoinPeer(params.get("room"), status, submitButton);
+        } else {
+          status.textContent = "登记服务未连接";
+        }
+
+        form.addEventListener("submit", async (event) => {
+          event.preventDefault();
+          const name = normalizeName(input.value);
+          if (!name) {
+            status.textContent = "请输入姓名";
+            return;
+          }
+
+          submitButton.disabled = true;
+          status.textContent = "提交中";
+          try {
+            if (state.mode === "backend") {
+              const response = await apiRequest("/api/participants", {
+                method: "POST",
+                body: { name, source: "scan" }
+              });
+              applyState(response.data);
+              status.textContent = "已登记";
+              input.value = "";
+            } else {
+              sendJoinName(name, status, input);
+            }
+          } catch (error) {
+            if (error.message === "姓名已登记") {
+              status.textContent = "姓名已登记";
+              input.value = "";
+            } else {
+              status.textContent = error.message;
+            }
+            submitButton.disabled = false;
+          }
+        });
+      }
+
+      async function bootHostPeer() {
+        const hasPeer = await waitForGlobal("Peer", 6500);
+        if (!hasPeer) {
+          setServerStatus("静态本机", true);
+          showToast("静态扫码通道加载失败，可手工导入名单");
+          return;
+        }
+
+        try {
+          state.hostPeer = new Peer(undefined, getPeerOptions());
+          state.hostPeer.on("open", (roomId) => {
+            state.roomId = roomId;
+            updateJoinLink(roomId);
+            renderQr();
+            setServerStatus("静态扫码已连接", false);
+          });
+          state.hostPeer.on("connection", (connection) => {
+            state.hostConnections.set(connection.peer, connection);
+            connection.on("data", (message) => receivePeerParticipant(message, connection));
+            connection.on("close", () => state.hostConnections.delete(connection.peer));
+            connection.on("error", () => state.hostConnections.delete(connection.peer));
+          });
+          state.hostPeer.on("error", () => {
+            setServerStatus("静态扫码异常", true);
+          });
+        } catch (error) {
+          setServerStatus("静态扫码异常", true);
+        }
+      }
+
+      async function bootJoinPeer(roomId, status, submitButton) {
+        const hasPeer = await waitForGlobal("Peer", 6500);
+        if (!hasPeer) {
+          status.textContent = "扫码通道加载失败";
+          return;
+        }
+
+        try {
+          const peer = new Peer(undefined, getPeerOptions());
+          peer.on("open", () => {
+            state.joinConnection = peer.connect(roomId, { reliable: true });
+            state.joinConnection.on("open", () => {
+              status.textContent = "请输入姓名";
+              submitButton.disabled = false;
+            });
+            state.joinConnection.on("data", (message) => {
+              if (!message || message.type !== "ack") return;
+              status.textContent = message.ok ? `已登记，总人数 ${message.count}` : message.text;
+              submitButton.disabled = false;
+            });
+            state.joinConnection.on("close", () => {
+              status.textContent = "大屏连接已断开";
+              submitButton.disabled = true;
+            });
+            state.joinConnection.on("error", () => {
+              status.textContent = "提交通道异常";
+              submitButton.disabled = true;
+            });
+          });
+          peer.on("error", () => {
+            status.textContent = "连接大屏失败";
+          });
+        } catch (error) {
+          status.textContent = "连接大屏失败";
+        }
+      }
+
+      function sendJoinName(name, status, input) {
+        if (!state.joinConnection || !state.joinConnection.open) {
+          status.textContent = "连接中，请稍后";
+          document.getElementById("joinSubmitButton").disabled = false;
+          return;
+        }
+        state.joinConnection.send({ type: "participant", name });
+        input.value = "";
+      }
+
+      function receivePeerParticipant(message, connection) {
+        if (!message || message.type !== "participant") return;
+        try {
+          const nextState = addParticipantsToState(state, [message.name], "scan");
+          applyState(nextState);
+          saveLocalState();
+          connection.send({ type: "ack", ok: true, count: state.participants.length, text: "已登记" });
+          showToast("扫码登记成功");
+        } catch (error) {
+          connection.send({ type: "ack", ok: false, count: state.participants.length, text: error.message });
+        }
+      }
+
+      async function refreshState() {
+        if (state.mode !== "backend") return;
+        try {
+          const response = await apiRequest("/api/state");
+          applyState(response.data);
+          setServerStatus("后端已连接", false);
+        } catch (error) {
+          setServerStatus("后端未连接", true);
+          showToast("后端服务未连接");
+        }
+      }
+
+      function applyState(nextState) {
+        state.participants = Array.isArray(nextState.participants) ? nextState.participants : [];
+        state.winners = {
+          ...createEmptyWinners(),
+          ...(nextState.winners || {})
+        };
+        renderParticipants();
+        renderWinners();
+        renderAwardButtons();
+        if (!state.drawing) setStageIdle();
+      }
+
+      async function submitParticipant(name, source) {
+        try {
+          if (state.mode === "backend") {
+            const response = await apiRequest("/api/participants", {
+              method: "POST",
+              body: { name, source }
+            });
+            applyState(response.data);
+          } else {
+            const nextState = addParticipantsToState(state, [name], source);
+            applyState(nextState);
+            saveLocalState();
+          }
+          showToast("已添加");
+        } catch (error) {
+          showToast(error.message);
+        }
+      }
+
+      async function importNames() {
+        const input = document.getElementById("bulkNames");
+        const names = input.value.split(/[\n,，;；]+/).map(normalizeName).filter(Boolean);
+        if (names.length === 0) {
+          showToast("请输入姓名");
+          return;
+        }
+
+        try {
+          if (state.mode === "backend") {
+            const response = await apiRequest("/api/participants/import", {
+              method: "POST",
+              body: { names }
+            });
+            applyState(response.data);
+          } else {
+            const nextState = addParticipantsToState(state, names, "import");
+            applyState(nextState);
+            saveLocalState();
+          }
+          input.value = "";
+          showToast("名单已导入");
+        } catch (error) {
+          showToast(error.message);
+        }
+      }
+
+      async function clearParticipants() {
+        if (!window.confirm("确定清空全部参与名单和中奖结果？")) return;
+        try {
+          if (state.mode === "backend") {
+            const response = await apiRequest("/api/participants", { method: "DELETE" });
+            applyState(response.data);
+          } else {
+            applyState(createEmptyState());
+            saveLocalState();
+          }
+          showToast("名单已清空");
+        } catch (error) {
+          showToast(error.message);
+        }
+      }
+
+      async function resetWinners() {
+        if (!window.confirm("确定重置全部中奖结果？")) return;
+        try {
+          if (state.mode === "backend") {
+            const response = await apiRequest("/api/winners/reset", { method: "POST" });
+            applyState(response.data);
+          } else {
+            state.winners = createEmptyWinners();
+            saveLocalState();
+            renderWinners();
+            renderAwardButtons();
+            setStageIdle();
+          }
+          showToast("中奖结果已重置");
+        } catch (error) {
+          showToast(error.message);
+        }
+      }
+
+      async function startDraw(awardKey) {
+        const award = AWARDS.find((item) => item.key === awardKey);
+        if (!award || state.drawing) return;
+
+        await refreshState();
+        if ((state.winners[award.key] || []).length > 0) {
+          showToast(`${award.label} 已抽出`);
+          return;
+        }
+
+        const eligible = getEligibleParticipants();
+        if (eligible.length < award.count) {
+          showToast(`${award.label} 至少还需要 ${award.count} 位未中奖参与者`);
+          return;
+        }
+
+        state.drawing = true;
+        state.drawStartTime = performance.now();
+        state.currentAward = award;
+        state.eligibleParticipants = eligible;
+        window.clearInterval(state.pollTimer);
+        window.cancelAnimationFrame(state.drawFrame);
+        setControlsDisabled(true);
+
+        const overlay = document.getElementById("drawOverlay");
+        document.getElementById("overlayAwardLabel").textContent = award.label;
+        document.getElementById("overlayAwardCount").textContent = `${award.count}名`;
+        document.getElementById("overlayRollingName").textContent = "准备开始";
+        document.getElementById("overlayTimerText").textContent = "20s";
+        document.getElementById("overlayProgressBar").style.transform = "scaleX(0)";
+        overlay.hidden = false;
+
+        setTimeout(() => {
+          overlay.style.opacity = "1";
+          const tick = (now) => {
+            const elapsed = Math.min(now - state.drawStartTime, DRAW_DURATION_MS);
+            const progress = elapsed / DRAW_DURATION_MS;
+            const participant = eligible[secureRandomIndex(eligible.length)];
+
+            document.getElementById("overlayRollingName").textContent = participant.name;
+            document.getElementById("overlayProgressBar").style.transform = `scaleX(${progress})`;
+            document.getElementById("overlayTimerText").textContent = `${Math.max(0, Math.ceil((DRAW_DURATION_MS - elapsed) / 1000))}s`;
+
+            if (elapsed < DRAW_DURATION_MS) {
+              state.drawFrame = window.requestAnimationFrame(tick);
+              return;
+            }
+
+            finishDrawFromOverlay();
+          };
+
+          state.drawFrame = window.requestAnimationFrame(tick);
+        }, 100);
+      }
+
+      function finishDrawFromOverlay() {
+        const overlay = document.getElementById("drawOverlay");
+        overlay.style.opacity = "0";
+        setTimeout(() => {
+          overlay.hidden = true;
+          finishDraw(state.currentAward);
+        }, 300);
+      }
+
+      function stopDrawEarly() {
+        if (!state.drawing || !state.currentAward) return;
+        window.cancelAnimationFrame(state.drawFrame);
+        finishDrawFromOverlay();
+      }
+
+      async function finishDraw(award) {
+        try {
+          let nextState;
+          if (state.mode === "backend") {
+            const response = await apiRequest("/api/draw", {
+              method: "POST",
+              body: { awardKey: award.key }
+            });
+            nextState = response.data;
+          } else {
+            nextState = drawAwardInState(state, award);
+          }
+
+          applyState(nextState);
+          if (state.mode === "static") saveLocalState();
+          const winners = nextState.winners[award.key] || [];
+          document.getElementById("rollingName").textContent = winners.map((item) => item.name).join("、");
+          document.getElementById("stageLabel").textContent = "COMPLETE";
+          document.getElementById("awardLabel").textContent = `${award.label} 已产出`;
+          document.getElementById("timerText").textContent = "0s";
+          document.getElementById("progressBar").style.transform = "scaleX(1)";
+          showToast(`${award.label} 完成`);
+        } catch (error) {
+          showToast(error.message);
+          await refreshState();
+        } finally {
+          state.drawing = false;
+          setControlsDisabled(false);
+          renderAwardButtons();
+          if (state.mode === "backend") {
+            state.pollTimer = window.setInterval(() => {
+              if (!state.drawing) refreshState();
+            }, POLL_INTERVAL_MS);
+          }
+        }
+      }
+
+      function addParticipantsToState(currentState, rawNames, source) {
+        const names = rawNames.map(normalizeName).filter(Boolean);
+        if (names.length === 0) throw new Error("请输入姓名");
+
+        const existing = new Set(currentState.participants.map((item) => item.name.toLocaleLowerCase()));
+        const createdAt = new Date().toISOString();
+        const participants = names.reduce((items, name) => {
+          const key = name.toLocaleLowerCase();
+          if (existing.has(key)) return items;
+          existing.add(key);
+          return [
+            ...items,
+            {
+              id: createId(),
+              name,
+              source,
+              createdAt
+            }
+          ];
+        }, []);
+
+        if (participants.length === 0) throw new Error("姓名已登记");
+
+        return {
+          participants: [...currentState.participants, ...participants],
+          winners: currentState.winners,
+          updatedAt: createdAt
+        };
+      }
+
+      function drawAwardInState(currentState, award) {
+        const eligible = getEligibleParticipants();
+        if (eligible.length < award.count) {
+          throw new Error(`${award.label} 至少还需要 ${award.count} 位未中奖参与者`);
+        }
+        return {
+          participants: currentState.participants,
+          winners: {
+            ...currentState.winners,
+            [award.key]: takeRandom(eligible, award.count)
+          },
+          updatedAt: new Date().toISOString()
+        };
+      }
+
+      function renderParticipants() {
+        const count = document.getElementById("participantCount");
+        const list = document.getElementById("participantList");
+        count.textContent = String(state.participants.length);
+        list.replaceChildren();
+
+        if (state.participants.length === 0) {
+          const empty = document.createElement("span");
+          empty.className = "name-chip";
+          empty.textContent = "等待登记";
+          list.appendChild(empty);
+          return;
+        }
+
+        state.participants.forEach((participant) => {
+          const chip = document.createElement("span");
+          chip.className = "name-chip";
+          chip.textContent = participant.name;
+          list.appendChild(chip);
+        });
+      }
+
+      function renderWinners() {
+        AWARDS.forEach((award) => {
+          const list = document.getElementById(award.listId);
+          const winners = state.winners[award.key] || [];
+          list.replaceChildren();
+
+          if (winners.length === 0) {
+            const emptyItem = document.createElement("li");
+            emptyItem.className = "empty-winner";
+            emptyItem.textContent = "待开奖";
+            list.appendChild(emptyItem);
+            return;
+          }
+
+          winners.forEach((winner) => {
+            const item = document.createElement("li");
+            item.textContent = winner.name;
+            list.appendChild(item);
+          });
+        });
+      }
+
+      function renderAwardButtons() {
+        document.querySelectorAll("[data-award-key]").forEach((button) => {
+          const award = AWARDS.find((item) => item.key === button.dataset.awardKey);
+          const alreadyDrawn = (state.winners[award.key] || []).length > 0;
+          button.disabled = state.drawing || alreadyDrawn;
+          button.textContent = alreadyDrawn ? `${award.label} 已完成` : `抽${award.label} ${award.count}名`;
+        });
+      }
+
+      function setStageIdle() {
+        const drawnCount = Object.values(state.winners).flat().length;
+        document.getElementById("stageLabel").textContent = state.participants.length ? "READY" : "WAITING";
+        document.getElementById("awardLabel").textContent = drawnCount ? `已产生 ${drawnCount} 名` : "选择奖项开始";
+        document.getElementById("rollingName").textContent = state.participants.length ? "准备开始" : "等待名单";
+        document.getElementById("progressBar").style.transform = "scaleX(0)";
+        document.getElementById("timerText").textContent = "20s";
+        setActiveAward("");
+      }
+
+      function setActiveAward(awardKey) {
+        document.querySelectorAll("[data-award-key]").forEach((button) => {
+          button.classList.toggle("active", button.dataset.awardKey === awardKey);
+        });
+      }
+
+      function setControlsDisabled(disabled) {
+        document.getElementById("importNamesButton").disabled = disabled;
+        document.getElementById("clearNamesButton").disabled = disabled;
+        document.getElementById("resetResultsButton").disabled = disabled;
+        document.querySelectorAll("[data-award-key]").forEach((button) => {
+          button.disabled = disabled;
+        });
+      }
+
+      function getEligibleParticipants() {
+        const winnerIds = new Set(Object.values(state.winners).flat().map((winner) => winner.id));
+        return state.participants.filter((participant) => !winnerIds.has(participant.id));
+      }
+
+      function updateJoinLink(roomId) {
+        const joinUrl = new URL(window.location.href);
+        joinUrl.search = "";
+        joinUrl.hash = "";
+        joinUrl.searchParams.set("join", "1");
+        if (roomId) joinUrl.searchParams.set("room", roomId);
+        document.getElementById("joinLink").value = joinUrl.toString();
+      }
+
+      async function configureBackendJoinLink() {
+        try {
+          const response = await apiRequest("/api/config");
+          const preferredOrigin = pickJoinOrigin(response.data.urls || []);
+          const joinUrl = new URL(preferredOrigin || window.location.origin);
+          joinUrl.pathname = window.location.pathname || "/";
+          joinUrl.search = "";
+          joinUrl.hash = "";
+          joinUrl.searchParams.set("join", "1");
+          document.getElementById("joinLink").value = joinUrl.toString();
+          renderQr();
+        } catch (error) {
+          updateJoinLink("");
+          renderQr();
+        }
+      }
+
+      function pickJoinOrigin(urls) {
+        const current = new URL(window.location.href);
+        const currentHost = current.hostname;
+        const openedOnLoopback = ["localhost", "127.0.0.1", "::1"].includes(currentHost);
+
+        if (!openedOnLoopback) return window.location.origin;
+
+        // 优先选择公网 URL（非局域网 IP 且非 localhost）
+        const publicUrl = urls.find((value) => {
+          try {
+            const hostname = new URL(value).hostname;
+            const isPrivate =
+              hostname === "localhost" ||
+              /^127\./.test(hostname) ||
+              /^10\./.test(hostname) ||
+              /^192\.168\./.test(hostname) ||
+              /^172\.(1[6-9]|2\d|3[0-1])\./.test(hostname);
+            return !isPrivate;
+          } catch (error) {
+            return false;
+          }
+        });
+        if (publicUrl) return publicUrl;
+
+        // 其次选择局域网 IP
+        const lanUrl = urls.find((value) => {
+          try {
+            const hostname = new URL(value).hostname;
+            return /^10\./.test(hostname)
+              || /^192\.168\./.test(hostname)
+              || /^172\.(1[6-9]|2\d|3[0-1])\./.test(hostname);
+          } catch (error) {
+            return false;
+          }
+        });
+
+        return lanUrl || urls.find((value) => !value.includes("127.0.0.1")) || window.location.origin;
+      }
+
+      function renderQr() {
+        const value = document.getElementById("joinLink").value;
+        const canvas = document.getElementById("qrCanvas");
+        const context = canvas.getContext("2d");
+
+        if (window.QRious) {
+          new QRious({
+            element: canvas,
+            value,
+            size: 240,
+            background: "white",
+            foreground: "#001b62",
+            level: "H"
+          });
+          return;
+        }
+
+        context.fillStyle = "#fff";
+        context.fillRect(0, 0, canvas.width, canvas.height);
+        context.fillStyle = "#001b62";
+        context.font = "bold 18px Arial";
+        context.textAlign = "center";
+        context.fillText("登记链接", canvas.width / 2, 112);
+        context.font = "12px Arial";
+        context.fillText("请复制下方链接", canvas.width / 2, 136);
+      }
+
+      async function copyJoinLink() {
+        const value = document.getElementById("joinLink").value;
+        try {
+          await navigator.clipboard.writeText(value);
+          showToast("登记链接已复制");
+        } catch (error) {
+          showToast("复制失败，可手动选择链接");
+        }
+      }
+
+      function exportParticipants() {
+        if (state.mode === "backend") {
+          window.location.href = "/api/export.csv";
+          return;
+        }
+        const rows = [
+          ["序号", "姓名", "来源", "登记时间"],
+          ...state.participants.map((participant, index) => [
+            String(index + 1),
+            participant.name,
+            participant.source,
+            participant.createdAt
+          ])
+        ];
+        const csv = rows.map((row) => row.map(escapeCsv).join(",")).join("\n");
+        const blob = new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8" });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = "wpp-media-delivery-618-participants.csv";
+        link.click();
+        URL.revokeObjectURL(url);
+      }
+
+      function setServerStatus(text, isError) {
+        const status = document.getElementById("serverStatus");
+        status.textContent = text;
+        status.classList.toggle("error", isError);
+      }
+
+      async function checkServer() {
+        try {
+          await apiRequest("/api/state");
+          return true;
+        } catch (error) {
+          return false;
+        }
+      }
+
+      async function apiRequest(path, options = {}) {
+        const init = {
+          method: options.method || "GET",
+          headers: {
+            "Content-Type": "application/json"
+          }
+        };
+        if (options.body) init.body = JSON.stringify(options.body);
+
+        const response = await fetch(path, init);
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok || payload.success === false) {
+          throw new Error(payload.error || "请求失败");
+        }
+        return payload;
+      }
+
+      function readLocalState() {
+        try {
+          const raw = window.localStorage.getItem(LOCAL_STATE_KEY);
+          return raw ? JSON.parse(raw) : createEmptyState();
+        } catch (error) {
+          return createEmptyState();
+        }
+      }
+
+      function saveLocalState() {
+        window.localStorage.setItem(LOCAL_STATE_KEY, JSON.stringify({
+          participants: state.participants,
+          winners: state.winners,
+          updatedAt: new Date().toISOString()
+        }));
+      }
+
+      function createEmptyState() {
+        return {
+          participants: [],
+          winners: createEmptyWinners(),
+          updatedAt: new Date().toISOString()
+        };
+      }
+
+      function createEmptyWinners() {
+        return { first: [], second: [], third: [] };
+      }
+
+      function normalizeName(value) {
+        return String(value || "")
+          .normalize("NFKC")
+          .replace(/\s+/g, " ")
+          .trim()
+          .slice(0, 40);
+      }
+
+      function takeRandom(items, count) {
+        const pool = [...items];
+        return Array.from({ length: count }, () => {
+          const index = secureRandomIndex(pool.length);
+          const selected = pool[index];
+          pool.splice(index, 1);
+          return selected;
+        });
+      }
+
+      function secureRandomIndex(max) {
+        if (max <= 1) return 0;
+        if (window.crypto && window.crypto.getRandomValues) {
+          const array = new Uint32Array(1);
+          window.crypto.getRandomValues(array);
+          return array[0] % max;
+        }
+        return Math.floor(Math.random() * max);
+      }
+
+      function createId() {
+        if (window.crypto && window.crypto.randomUUID) return window.crypto.randomUUID();
+        return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+      }
+
+      function escapeCsv(value) {
+        const text = String(value || "");
+        if (!/[",\n]/.test(text)) return text;
+        return `"${text.replace(/"/g, '""')}"`;
+      }
+
+      function waitForGlobal(name, timeoutMs) {
+        return new Promise((resolve) => {
+          if (window[name]) {
+            resolve(true);
+            return;
+          }
+          const startedAt = performance.now();
+          const check = () => {
+            if (window[name]) {
+              resolve(true);
+              return;
+            }
+            if (performance.now() - startedAt > timeoutMs) {
+              resolve(false);
+              return;
+            }
+            window.setTimeout(check, 100);
+          };
+          check();
+        });
+      }
+
+      function getPeerOptions() {
+        return {
+          host: "0.peerjs.com",
+          port: 443,
+          path: "/",
+          secure: true,
+          debug: 0
+        };
+      }
+
+      function showToast(text) {
+        const toast = document.getElementById("toast");
+        toast.textContent = text;
+        toast.classList.add("show");
+        window.clearTimeout(state.toastTimer);
+        state.toastTimer = window.setTimeout(() => toast.classList.remove("show"), 2200);
+      }
+    })();
+  </script>
+</body>
+</html>
