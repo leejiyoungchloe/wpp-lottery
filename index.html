@@ -881,7 +881,7 @@
       ];
 
       const params = new URLSearchParams(window.location.search);
-      const isJoinMode = params.get("join") === "1";
+      const isJoinMode = params.get("join") === "1" || window.location.pathname === "/join";
       const state = {
         mode: "detecting",
         participants: [],

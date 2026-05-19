@@ -6,10 +6,14 @@ const crypto = require("crypto");
 
 const PORT = Number(process.env.PORT || 5173);
 const ROOT_DIR = __dirname;
-const DATA_DIR = path.join(ROOT_DIR, "data");
+const DATA_DIR = process.env.DATA_DIR
+  ? path.resolve(process.env.DATA_DIR)
+  : path.join(ROOT_DIR, "data");
 const DATA_PATH = path.join(DATA_DIR, "lottery-data.json");
 const MAX_BODY_BYTES = 1024 * 1024;
 const MAX_PARTICIPANTS = 1200;
+const ADMIN_USERNAME = process.env.ADMIN_USERNAME || "admin";
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "";
 
 const AWARDS = {
   first: { label: "一等奖", count: 1 },
@@ -30,26 +34,35 @@ const DEFAULT_STATE = {
 let writeQueue = Promise.resolve();
 
 class HttpError extends Error {
-  constructor(status, message) {
+  constructor(status, message, headers = {}) {
     super(message);
     this.status = status;
+    this.headers = headers;
   }
 }
 
 const server = http.createServer(async (request, response) => {
   try {
     const url = new URL(request.url, `http://${request.headers.host || "localhost"}`);
+    if (request.method === "GET" && url.pathname === "/healthz") {
+      sendJson(response, 200, {
+        success: true,
+        status: "ok",
+        dataDir: DATA_DIR
+      });
+      return;
+    }
     if (url.pathname.startsWith("/api/")) {
       await handleApi(request, response, url);
       return;
     }
-    await serveStatic(response, url);
+    await serveStatic(request, response, url);
   } catch (error) {
     const status = error.status || 500;
     sendJson(response, status, {
       success: false,
       error: status === 500 ? "Server error" : error.message
-    });
+    }, error.headers || {});
     if (status === 500) {
       console.error(error);
     }
@@ -91,6 +104,7 @@ async function handleApi(request, response, url) {
   }
 
   if (route === "POST /api/participants/import") {
+    requireAdmin(request);
     const body = await readJsonBody(request);
     const names = Array.isArray(body.names) ? body.names : String(body.names || "").split(/[\n,，;；]+/);
     const nextState = await updateState((state) => addParticipants(state, names, "import"));
@@ -99,12 +113,14 @@ async function handleApi(request, response, url) {
   }
 
   if (route === "DELETE /api/participants") {
+    requireAdmin(request);
     const nextState = await updateState(() => withTimestamp(DEFAULT_STATE));
     sendJson(response, 200, { success: true, data: nextState });
     return;
   }
 
   if (route === "POST /api/winners/reset") {
+    requireAdmin(request);
     const nextState = await updateState((state) => ({
       ...state,
       winners: DEFAULT_STATE.winners,
@@ -115,6 +131,7 @@ async function handleApi(request, response, url) {
   }
 
   if (route === "POST /api/draw") {
+    requireAdmin(request);
     const body = await readJsonBody(request);
     const nextState = await updateState((state) => drawAward(state, body.awardKey));
     sendJson(response, 200, { success: true, data: nextState });
@@ -122,6 +139,7 @@ async function handleApi(request, response, url) {
   }
 
   if (route === "GET /api/export.csv") {
+    requireAdmin(request);
     const state = await readState();
     sendCsv(response, state);
     return;
@@ -267,9 +285,12 @@ async function readJsonBody(request) {
   }
 }
 
-async function serveStatic(response, url) {
+async function serveStatic(request, response, url) {
   let pathname = url.pathname;
   if (pathname === "/" || pathname === "/join") pathname = "/index.html";
+  if (pathname === "/index.html" && !isJoinRequest(url)) {
+    requireAdmin(request);
+  }
 
   const safePart = path.normalize(decodeURIComponent(pathname).replace(/^\/+/, ""));
   if (safePart.startsWith("..")) {
@@ -289,10 +310,11 @@ async function serveStatic(response, url) {
   response.end(content);
 }
 
-function sendJson(response, status, payload) {
+function sendJson(response, status, payload, headers = {}) {
   response.writeHead(status, {
     "Content-Type": "application/json; charset=utf-8",
-    "Cache-Control": "no-store"
+    "Cache-Control": "no-store",
+    ...headers
   });
   response.end(JSON.stringify(payload));
 }
@@ -333,6 +355,37 @@ function withTimestamp(state) {
     ...state,
     updatedAt: new Date().toISOString()
   };
+}
+
+function isJoinRequest(url) {
+  return url.pathname === "/join" || url.searchParams.get("join") === "1";
+}
+
+function requireAdmin(request) {
+  if (!ADMIN_PASSWORD) return;
+
+  const auth = request.headers.authorization || "";
+  const match = auth.match(/^Basic\s+(.+)$/i);
+  if (match) {
+    const decoded = Buffer.from(match[1], "base64").toString("utf8");
+    const separatorIndex = decoded.indexOf(":");
+    const username = decoded.slice(0, separatorIndex);
+    const password = decoded.slice(separatorIndex + 1);
+    if (secureEqual(username, ADMIN_USERNAME) && secureEqual(password, ADMIN_PASSWORD)) {
+      return;
+    }
+  }
+
+  throw new HttpError(401, "需要老板密码", {
+    "WWW-Authenticate": 'Basic realm="WPP Lottery Admin", charset="UTF-8"'
+  });
+}
+
+function secureEqual(left, right) {
+  const leftBuffer = Buffer.from(String(left));
+  const rightBuffer = Buffer.from(String(right));
+  if (leftBuffer.length !== rightBuffer.length) return false;
+  return crypto.timingSafeEqual(leftBuffer, rightBuffer);
 }
 
 function getContentType(filePath) {
