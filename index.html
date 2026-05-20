@@ -874,6 +874,7 @@
       const DRAW_DURATION_MS = 20000;
       const POLL_INTERVAL_MS = 1500;
       const LOCAL_STATE_KEY = "wpp-media-delivery-618-static-state";
+      const ADMIN_AUTH_KEY = "wpp-media-delivery-618-admin-auth";
       const AWARDS = [
         { key: "first", label: "一等奖", count: 1, listId: "firstWinners" },
         { key: "second", label: "二等奖", count: 2, listId: "secondWinners" },
@@ -893,6 +894,7 @@
         hostPeer: null,
         hostConnections: new Map(),
         joinConnection: null,
+        adminAuth: window.sessionStorage.getItem(ADMIN_AUTH_KEY) || "",
         roomId: "",
         drawStartTime: null,
         currentAward: null,
@@ -941,6 +943,10 @@
         if (await checkServer()) {
           state.mode = "backend";
           setServerStatus("后端已连接", false);
+          if (!await ensureAdminAccess()) {
+            setServerStatus("需要老板密码", true);
+            return;
+          }
           await configureBackendJoinLink();
           await refreshState();
           state.pollTimer = window.setInterval(() => {
@@ -1111,6 +1117,29 @@
         }
       }
 
+      async function ensureAdminAccess() {
+        if (state.mode !== "backend") return true;
+        for (let attempt = 0; attempt < 3; attempt += 1) {
+          try {
+            await apiRequest("/api/admin/check");
+            return true;
+          } catch (error) {
+            if (error.status !== 401) {
+              showToast(error.message);
+              return false;
+            }
+            const password = window.prompt("请输入老板密码");
+            if (password === null) return false;
+            state.adminAuth = `Basic ${window.btoa(`admin:${password}`)}`;
+            window.sessionStorage.setItem(ADMIN_AUTH_KEY, state.adminAuth);
+          }
+        }
+        window.sessionStorage.removeItem(ADMIN_AUTH_KEY);
+        state.adminAuth = "";
+        showToast("老板密码错误");
+        return false;
+      }
+
       function applyState(nextState) {
         state.participants = Array.isArray(nextState.participants) ? nextState.participants : [];
         state.winners = {
@@ -1143,6 +1172,7 @@
       }
 
       async function importNames() {
+        if (state.mode === "backend" && !await ensureAdminAccess()) return;
         const input = document.getElementById("bulkNames");
         const names = input.value.split(/[\n,，;；]+/).map(normalizeName).filter(Boolean);
         if (names.length === 0) {
@@ -1170,6 +1200,7 @@
       }
 
       async function clearParticipants() {
+        if (state.mode === "backend" && !await ensureAdminAccess()) return;
         if (!window.confirm("确定清空全部参与名单和中奖结果？")) return;
         try {
           if (state.mode === "backend") {
@@ -1186,6 +1217,7 @@
       }
 
       async function resetWinners() {
+        if (state.mode === "backend" && !await ensureAdminAccess()) return;
         if (!window.confirm("确定重置全部中奖结果？")) return;
         try {
           if (state.mode === "backend") {
@@ -1207,6 +1239,7 @@
       async function startDraw(awardKey) {
         const award = AWARDS.find((item) => item.key === awardKey);
         if (!award || state.drawing) return;
+        if (state.mode === "backend" && !await ensureAdminAccess()) return;
 
         await refreshState();
         if ((state.winners[award.key] || []).length > 0) {
@@ -1545,7 +1578,7 @@
 
       function exportParticipants() {
         if (state.mode === "backend") {
-          window.location.href = "/api/export.csv";
+          exportParticipantsFromBackend();
           return;
         }
         const rows = [
@@ -1565,6 +1598,25 @@
         link.download = "wpp-media-delivery-618-participants.csv";
         link.click();
         URL.revokeObjectURL(url);
+      }
+
+      async function exportParticipantsFromBackend() {
+        try {
+          if (!await ensureAdminAccess()) return;
+          const headers = {};
+          if (state.adminAuth) headers.Authorization = state.adminAuth;
+          const response = await fetch("/api/export.csv", { headers });
+          if (!response.ok) throw new Error("导出失败");
+          const blob = await response.blob();
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement("a");
+          link.href = url;
+          link.download = "wpp-media-delivery-618-participants.csv";
+          link.click();
+          URL.revokeObjectURL(url);
+        } catch (error) {
+          showToast(error.message);
+        }
       }
 
       function setServerStatus(text, isError) {
@@ -1589,12 +1641,15 @@
             "Content-Type": "application/json"
           }
         };
+        if (state.adminAuth) init.headers.Authorization = state.adminAuth;
         if (options.body) init.body = JSON.stringify(options.body);
 
         const response = await fetch(path, init);
         const payload = await response.json().catch(() => ({}));
         if (!response.ok || payload.success === false) {
-          throw new Error(payload.error || "请求失败");
+          const error = new Error(payload.error || "请求失败");
+          error.status = response.status;
+          throw error;
         }
         return payload;
       }

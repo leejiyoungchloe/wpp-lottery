@@ -96,6 +96,12 @@ async function handleApi(request, response, url) {
     return;
   }
 
+  if (route === "GET /api/admin/check") {
+    requireAdmin(request);
+    sendJson(response, 200, { success: true });
+    return;
+  }
+
   if (route === "POST /api/participants") {
     const body = await readJsonBody(request);
     const nextState = await updateState((state) => addParticipants(state, [body.name], body.source || "scan"));

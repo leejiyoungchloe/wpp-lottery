@@ -1,74 +1,85 @@
-# 抽奖页面固定网址部署说明
+# 抽奖页面免费固定网址部署说明
 
 ## 结论
 
-这个项目不是纯静态网页。它需要运行 `server.js`，因为员工登记、老板端名单同步、抽奖结果保存都依赖 `/api/*` 接口和 `data/lottery-data.json`。
+不付费时，不建议使用 Render Free。Render Free 会休眠，且没有持久磁盘，不适合“老板随时打开、员工扫码登记、数据不能丢”的活动页面。
 
-如果只是把 `index.html` 上传到普通静态空间，老板端和员工端不能稳定共享同一份名单。
+当前项目已经改成免费部署方案：
 
-## 正式推荐方案：Render 付费 Web Service + Persistent Disk
+- 页面托管：Netlify 免费站点
+- API：Netlify Functions
+- 数据存储：Netlify Blobs
+- 固定网址：Netlify 自动提供 `https://xxx.netlify.app`
+- 老板端密码：`ADMIN_PASSWORD`
+- 员工登记页公开：`/join` 或 `/?join=1`
 
-本项目已经带有 `render.yaml`，用于创建一套正式部署配置：
+## 部署后链接
 
-- Node.js Web Service
-- `starter` 付费实例，避免免费实例休眠
-- 新加坡区域
-- `/healthz` 健康检查
-- `/var/data` 持久磁盘
-- `ADMIN_PASSWORD` 老板端密码
+- 老板主页面：`https://你的站点.netlify.app/`
+- 员工登记页：`https://你的站点.netlify.app/join`
+- 备用登记页：`https://你的站点.netlify.app/?join=1`
 
-不要使用 Render Free，也不要使用纯静态部署。
+员工提交姓名后，老板页面会自动刷新名单，当前间隔约 1.5 秒。
 
-部署后：
+## Netlify 免费部署步骤
 
-- 老板打开主页面：`https://你的固定域名/`
-- 员工登记链接：`https://你的固定域名/?join=1` 或 `https://你的固定域名/join`
-- 页面里的二维码会自动指向登记链接
-- 员工提交姓名后，老板页面会自动刷新名单，当前间隔约 1.5 秒
-
-## Render 正式部署步骤
-
-1. 把本文件夹内容上传到一个 GitHub 仓库。
-2. 在 Render 选择 `New` -> `Blueprint`。
-3. 选择这个 GitHub 仓库。
-4. Render 会读取仓库里的 `render.yaml`。
-5. 在环境变量页面填写：
-   - `ADMIN_PASSWORD`: 老板端密码
-6. 创建服务并等待部署完成。
-7. 部署完成后，Render 会给一个固定网址，例如：
-   - `https://your-lottery.onrender.com/`
-8. 老板用这个网址打开主页面。
-9. 员工扫码页面上的二维码，或直接访问：
-   - `https://your-lottery.onrender.com/?join=1`
+1. 打开 Netlify。
+2. 选择 `Add new site` -> `Import an existing project`。
+3. 选择 GitHub 仓库：
+   - `leejiyoungchloe/wpp-lottery`
+4. Netlify 会读取仓库里的 `netlify.toml`。
+5. Build command 使用：
+   - `npm install`
+6. Publish directory 使用：
+   - `.`
+7. 在环境变量里添加：
+   - `ADMIN_PASSWORD`: 老板密码
+   - `ADMIN_USERNAME`: 可选，默认是 `admin`
+8. 部署。
 
 ## 老板端密码
 
-如果设置了 `ADMIN_PASSWORD`，老板打开主页面时浏览器会弹出登录框：
+老板打开主页面时，页面会要求输入老板密码。
+
+默认用户名：
 
 ```text
-用户名：admin
-密码：你在 Render 里填写的 ADMIN_PASSWORD
+admin
 ```
+
+密码就是你在 Netlify 环境变量里设置的 `ADMIN_PASSWORD`。
 
 员工登记页不需要密码。
 
-## 数据持久化
+## 数据保存位置
 
-正式部署时名单保存在 Render 持久磁盘：
+正式线上数据保存在 Netlify Blobs：
 
 ```text
-/var/data/lottery-data.json
+wpp-lottery-data
 ```
 
-本地开发时名单仍保存在：
+本地运行 `npm start` 时，数据仍保存在：
 
 ```text
 data/lottery-data.json
 ```
 
-Render 的持久磁盘会在服务重启和重新部署后保留名单。
+## 正式活动前检查清单
+
+- 在 Netlify 设置好 `ADMIN_PASSWORD`。
+- 部署完成后，打开老板主页面，确认会要求输入密码。
+- 用手机打开 `/join`，确认不需要密码。
+- 用至少两台手机登记不同姓名，确认老板页面 1 到 2 秒内出现姓名。
+- 测试重复姓名是否提示“姓名已登记”。
+- 测试导出 CSV。
+- 活动开始前在老板页面清空测试名单和中奖结果。
 
 ## 不推荐方案
+
+### Render Free
+
+不推荐，因为免费服务会休眠，且本地文件不适合长期保存名单。
 
 ### Cloudflare Tunnel 本地公网模式
 
@@ -78,27 +89,11 @@ Render 的持久磁盘会在服务重启和重新部署后保留名单。
 npm run start:tunnel
 ```
 
-这个适合临时测试，手机不同网络也能扫码，但 `trycloudflare.com` 链接通常每次启动都会变化，不满足“网址固定不变”。
+这个适合临时测试，但 `trycloudflare.com` 链接通常每次启动都会变化，不满足“网址固定不变”。
 
 ### 纯静态托管
 
-GitHub Pages、普通静态服务器、仅上传 HTML 的空间都不适合当前需求，因为无法保存和同步员工名单。
-
-### 直接上 Netlify/Vercel 静态站
-
-Netlify/Vercel 可以托管页面，但当前 `server.js` 不能原样作为长期运行的 Node 服务。要上这些平台，需要把 `/api/*` 改造成 Serverless Functions，并把 `data/lottery-data.json` 改成外部存储。
-
-## 正式活动前检查清单
-
-- 在老板页面清空测试名单和中奖结果。
-- 用老板电脑打开 `https://你的固定域名/`。
-- 用至少两台手机扫码登记，确认老板页面 1 到 2 秒内出现姓名。
-- 测试重复姓名是否提示“姓名已登记”。
-- 测试导出 CSV。
-- 确认老板页面需要密码，员工登记页不需要密码。
-- 确认 Render 服务是 `starter` 或更高付费实例。
-- 确认 Render 服务已经挂载 `/var/data` 持久磁盘。
-- 确认健康检查 `/healthz` 正常。
+GitHub Pages、普通静态服务器、只上传 HTML 的空间都不适合原始版本，因为无法可靠保存和同步员工名单。
 
 ## 本地测试命令
 
@@ -110,10 +105,4 @@ npm start
 
 ```text
 http://127.0.0.1:5173/
-```
-
-同一 Wi-Fi 下，手机可访问终端显示的局域网地址，例如：
-
-```text
-http://192.168.x.x:5173/?join=1
 ```
