@@ -4,6 +4,8 @@ import crypto from "node:crypto";
 const MAX_BODY_BYTES = 1024 * 1024;
 const MAX_PARTICIPANTS = 1200;
 const PARTICIPANT_PREFIX = "participants/";
+const PARTICIPANT_BACKUP_PREFIX = "participants-by-name/";
+const STATE_KEY = "state.json";
 const WINNERS_KEY = "winners.json";
 
 const AWARDS = {
@@ -74,7 +76,11 @@ export default async (request) => {
 
     if (route === "POST /api/winners/reset") {
       requireAdmin(request);
-      await writeWinners(DEFAULT_WINNERS);
+      const state = await readState();
+      await Promise.all([
+        writeState(createState(state.participants, DEFAULT_WINNERS)),
+        writeWinners(DEFAULT_WINNERS)
+      ]);
       return json(200, { success: true, data: await readState() });
     }
 
@@ -101,16 +107,53 @@ export default async (request) => {
 };
 
 async function readState() {
-  const [participants, winners] = await Promise.all([readParticipants(), readWinners()]);
-  const updatedAt = [
-    ...participants.map((participant) => participant.createdAt),
-    ...Object.values(winners).flat().map((winner) => winner.createdAt)
-  ].filter(Boolean).sort().at(-1) || null;
+  const store = getLotteryStore();
+  const [cachedState, backupBlobs] = await Promise.all([
+    store.get(STATE_KEY, { type: "json" }).catch(() => null),
+    listParticipantBackups()
+  ]);
+  const normalized = normalizeState(cachedState);
+  if (normalized && normalized.participants.length === backupBlobs.length) {
+    return normalized;
+  }
 
-  return { participants, winners, updatedAt };
+  return rebuildStateFromBackups(normalized?.winners);
 }
 
-async function readParticipants() {
+async function rebuildStateFromBackups(existingWinners) {
+  const [backupParticipants, legacyParticipants, winners] = await Promise.all([
+    readParticipantBackups(),
+    readLegacyParticipants(),
+    existingWinners ? Promise.resolve(existingWinners) : readWinners()
+  ]);
+  const participantMap = new Map();
+
+  [...legacyParticipants, ...backupParticipants].forEach((participant) => {
+    if (!participant?.name) return;
+    participantMap.set(participant.name.toLocaleLowerCase(), participant);
+  });
+
+  const participants = [...participantMap.values()]
+    .sort((left, right) => String(left.createdAt).localeCompare(String(right.createdAt)));
+  const state = createState(participants, winners);
+  await Promise.all([
+    writeState(state),
+    ...legacyParticipants.map((participant) => writeParticipantBackup(participant))
+  ]);
+  return state;
+}
+
+async function readParticipantBackups() {
+  const store = getLotteryStore();
+  const blobs = await listParticipantBackups();
+  const participants = await Promise.all(
+    blobs.map(async (blob) => store.get(blob.key, { type: "json" }))
+  );
+
+  return participants.filter(Boolean);
+}
+
+async function readLegacyParticipants() {
   const store = getLotteryStore();
   const { blobs } = await store.list({ prefix: PARTICIPANT_PREFIX });
   const participants = await Promise.all(
@@ -120,6 +163,11 @@ async function readParticipants() {
   return participants
     .filter(Boolean)
     .sort((left, right) => String(left.createdAt).localeCompare(String(right.createdAt)));
+}
+
+async function listParticipantBackups() {
+  const { blobs } = await getLotteryStore().list({ prefix: PARTICIPANT_BACKUP_PREFIX });
+  return blobs;
 }
 
 async function readWinners() {
@@ -137,14 +185,23 @@ async function writeWinners(winners) {
   });
 }
 
+async function writeState(state) {
+  await getLotteryStore().setJSON(STATE_KEY, normalizeState(state) || createState([], DEFAULT_WINNERS));
+}
+
+async function writeParticipantBackup(participant) {
+  const key = `${PARTICIPANT_BACKUP_PREFIX}${participantKey(participant.name)}.json`;
+  await getLotteryStore().setJSON(key, participant);
+}
+
 async function addParticipants(rawNames, source) {
   const names = rawNames.map(sanitizeName).filter(Boolean);
   if (names.length === 0) {
     throw new HttpError(400, "请输入姓名");
   }
 
-  const current = await readParticipants();
-  const existing = new Set(current.map((participant) => participant.name.toLocaleLowerCase()));
+  const current = await readState();
+  const existing = new Set(current.participants.map((participant) => participant.name.toLocaleLowerCase()));
   const sourceName = ["scan", "manual", "import"].includes(source) ? source : "scan";
   const createdAt = new Date().toISOString();
   const additions = [];
@@ -165,24 +222,29 @@ async function addParticipants(rawNames, source) {
     throw new HttpError(409, "姓名已登记");
   }
 
-  if (current.length + additions.length > MAX_PARTICIPANTS) {
+  if (current.participants.length + additions.length > MAX_PARTICIPANTS) {
     throw new HttpError(400, `参与人员最多 ${MAX_PARTICIPANTS} 人`);
   }
 
-  const store = getLotteryStore();
-  await Promise.all(additions.map((participant) => {
-    const key = `${PARTICIPANT_PREFIX}${participantKey(participant.name)}.json`;
-    return store.setJSON(key, participant);
-  }));
+  const nextState = createState([...current.participants, ...additions], current.winners);
+  await Promise.all([
+    ...additions.map((participant) => writeParticipantBackup(participant)),
+    writeState(nextState)
+  ]);
 
   return readState();
 }
 
 async function clearParticipants() {
   const store = getLotteryStore();
-  const { blobs } = await store.list({ prefix: PARTICIPANT_PREFIX });
+  const [legacy, backups] = await Promise.all([
+    store.list({ prefix: PARTICIPANT_PREFIX }),
+    store.list({ prefix: PARTICIPANT_BACKUP_PREFIX })
+  ]);
   await Promise.all([
-    ...blobs.map((blob) => store.delete(blob.key)),
+    ...legacy.blobs.map((blob) => store.delete(blob.key)),
+    ...backups.blobs.map((blob) => store.delete(blob.key)),
+    store.delete(STATE_KEY),
     store.delete(WINNERS_KEY)
   ]);
 }
@@ -208,7 +270,10 @@ async function drawAward(awardKey) {
     ...state.winners,
     [awardKey]: takeRandom(eligible, award.count)
   };
-  await writeWinners(winners);
+  await Promise.all([
+    writeState(createState(state.participants, winners)),
+    writeWinners(winners)
+  ]);
   return readState();
 }
 
@@ -256,6 +321,34 @@ function sanitizeName(value) {
 
 function participantKey(name) {
   return crypto.createHash("sha256").update(name.toLocaleLowerCase()).digest("hex");
+}
+
+function createState(participants, winners) {
+  const normalizedParticipants = Array.isArray(participants)
+    ? participants.filter(Boolean).sort((left, right) => String(left.createdAt).localeCompare(String(right.createdAt)))
+    : [];
+  const normalizedWinners = {
+    ...DEFAULT_WINNERS,
+    ...(winners || {})
+  };
+  const updatedAt = [
+    ...normalizedParticipants.map((participant) => participant.createdAt),
+    ...Object.values(normalizedWinners).flat().map((winner) => winner.createdAt)
+  ].filter(Boolean).sort().at(-1) || null;
+
+  return {
+    participants: normalizedParticipants,
+    winners: normalizedWinners,
+    updatedAt
+  };
+}
+
+function normalizeState(state) {
+  if (!state || typeof state !== "object") return null;
+  return createState(
+    Array.isArray(state.participants) ? state.participants : [],
+    state.winners || DEFAULT_WINNERS
+  );
 }
 
 function takeRandom(items, count) {
